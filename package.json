@@ -1,14 +1,15 @@
 {
   "name": "NVW",
-  "version": "0.1.0",
-  "description": "",
+  "version": "0.1.1",
+  "description": "Authentic Neovim Web Studio built on WebTUI",
   "main": "index.js",
   "bin": {
     "nvw": "./bin/nvw.js"
   },
   "scripts": {
     "start": "node server.js",
-    "test": "node tests/test_audit.js"
+    "test": "node tests/test_audit.js",
+    "test:all": "node tests/test_audit.js && node tests/test_scroll_sides.mjs && node tests/test_initial_redraw.mjs && node tests/test_e05_editing.mjs && node tests/test_e04_lifecycle.mjs"
   },
   "keywords": [
     "neovim",

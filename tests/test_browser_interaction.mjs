@@ -2,10 +2,29 @@ import puppeteer from 'puppeteer-core';
 import { spawn } from 'child_process';
 import http from 'node:http';
 
-const CHROME = process.env.NVW_CHROME ||
-  '/Users/Katomoshi/Library/Caches/ms-playwright/chromium-1234/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing';
-const PORT = 54322;
+function findSystemChrome() {
+  if (process.env.NVW_CHROME && fs.existsSync(process.env.NVW_CHROME)) {
+    return process.env.NVW_CHROME;
+  }
+  const candidates = [
+    '/Users/Katomoshi/Library/Caches/ms-playwright/chromium-1234/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing',
+    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    '/Applications/Chromium.app/Contents/MacOS/Chromium',
+    '/usr/bin/google-chrome',
+    '/usr/bin/chromium-browser',
+    '/usr/bin/chromium'
+  ];
+  return candidates.find(c => fs.existsSync(c)) || null;
+}
+
+const CHROME = findSystemChrome();
+const PORT = process.env.NVW_TEST_PORT ? parseInt(process.env.NVW_TEST_PORT, 10) : 54322;
 const BASE_URL = `http://127.0.0.1:${PORT}`;
+
+if (!CHROME) {
+  console.log('⚠️ 未检测到可用的本地 Chrome/Chromium 浏览器，跳过端到端浏览器交互测试（标为 BLOCKED）。可通过 NVW_CHROME 指定。');
+  process.exit(0);
+}
 
 console.log('🧪 Starting Browser Interaction E2E Verification Suite on', BASE_URL);
 
