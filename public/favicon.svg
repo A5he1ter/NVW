@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" shape-rendering="crispEdges" role="img" aria-label="NVW">
+  <rect width="32" height="32" fill="#11111b"/>
+  <rect x="1.5" y="1.5" width="29" height="29" fill="none" stroke="#45475a" stroke-width="1"/>
+  <text x="7" y="16" fill="#94e2d5" font-family="monospace" font-size="16" font-weight="bold" textLength="8" lengthAdjust="spacingAndGlyphs" dominant-baseline="central">&gt;</text>
+  <text x="16" y="16" fill="#cba6f7" font-family="monospace" font-size="16" font-weight="bold" textLength="9" lengthAdjust="spacingAndGlyphs" dominant-baseline="central">_</text>
+</svg>

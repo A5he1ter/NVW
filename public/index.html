@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-webtui-theme="catppuccin-mocha">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NVW · WebTUI Neovim</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+
+  <!-- 启动守卫：脚本/模块没跑起来时，把原因直接写到页面上（必须在最前） -->
+  <script src="/js/boot-guard.js"></script>
+
+
+
+  <!-- 官方 WebTUI -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- =====================================================================
+     应用骨架 —— 与官方文档站 https://webtui.ironclad.sh 完全同构：
+     body,html 为 flex column 视口，第一层为 <column self-="grow">
+     ===================================================================== -->
+<column self-="grow">
+
+  <!-- ============================ 顶栏 ============================ -->
+  <nav box-="square" id="topbar">
+    <a href="/" id="home-link">&lt;/<span>#&gt;</span><span>NVW</span></a>
+
+    <row id="links">
+      <button size-="small" variant-="background1" id="btnWorkspace" popovertarget="workspacePanel" title="Switch workspace" aria-label="Switch workspace"><span>&#xf07b;</span><span id="currentWorkspaceText">Workspace</span></button>
+      <button size-="small" variant-="background1" id="btnTheme" popovertarget="themePanel" title="Change theme" aria-label="Change theme"><span>&#xf042;</span><span id="themeLabel">Mocha</span></button>
+      <button size-="small" variant-="background1" id="btnOpenSettings" title="Settings" aria-label="Settings"><span>&#xf013;</span><span>Settings</span><span data-hotkey="settings" is-="badge" variant-="background2"></span></button>
+      <button size-="small" variant-="background1" id="btnOpenKeymap" title="Docs &amp; keymaps" aria-label="Docs and keymaps"><span>&#xf059;</span><span>Docs</span><span data-hotkey="docs" is-="badge" variant-="background2"></span></button>
+      <button id="search-button" size-="small" title="Find file" aria-label="Find file"><span>&#xea6d;</span><span>Search</span><span data-hotkey="find" is-="badge" variant-="background2"></span></button>
+    </row>
+  </nav>
+
+  <!-- 工作区弹层 -->
+  <dialog id="workspacePanel" popover box-="round" shear-="top" position-="end start" container-="auto">
+    <row align-="between">
+      <span is-="badge" variant-="background1">Workspaces</span>
+      <button size-="small" variant-="foreground0" id="btnWorkspaceClose" title="Close" aria-label="Close workspaces">x</button>
+    </row>
+    <column box-="round" id="recentProjectsList"></column>
+    <separator is-="separator" cap-="bisect"></separator>
+    <row align-="between" gap-="1">
+      <button size-="small" id="btnOpenNewWorkspaceModal" title="Browse folders" aria-label="Browse folders">Browse…</button>
+      <span is-="badge" variant-="background1" id="workspacePanelHint">Esc to close</span>
+    </row>
+  </dialog>
+
+  <!-- 主题弹层 -->
+  <dialog id="themePanel" popover box-="round" shear-="top" position-="end start" container-="auto">
+    <row align-="between">
+      <span is-="badge" variant-="background1">Themes</span>
+      <button size-="small" variant-="foreground0" id="btnThemeClose" title="Close" aria-label="Close themes">x</button>
+    </row>
+    <column box-="round" id="themePickerList"></column>
+    <row align-="start">
+      <span is-="badge" variant-="background1" id="themePanelHint">Esc to close</span>
+    </row>
+  </dialog>
+
+  <!-- 查找弹窗（官方文档站同款结构） -->
+  <dialog id="search-dialog" size-="small" position-="center" container-="fill auto">
+    <div box-="round" shear-="top" id="search-content">
+      <row align-="between">
+        <span is-="badge" variant-="background1">Find file</span>
+        <button id="close-btn" variant-="foreground0" size-="small" title="Close" aria-label="Close finder">x</button>
+      </row>
+      <column box-="round">
+        <input id="search-input" placeholder="Filter" autocomplete="off" autofocus aria-label="Filter files">
+      </column>
+      <row align-="between">
+        <span is-="spinner" variant-="dots" id="searchSpinner" hidden></span>
+        <span is-="badge" variant-="background1" id="search-count">0</span>
+        <span is-="badge" variant-="foreground2">↑↓ move · ↵ open · Esc close</span>
+      </row>
+      <div id="search-results">
+        <div id="search-results-container"></div>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- 工作区目录浏览器 -->
+  <dialog id="workspaceBrowserDialog" size-="default" position-="center" container-="fill auto">
+    <div box-="round" shear-="top">
+      <row align-="between">
+        <span is-="badge" variant-="background1">Open workspace</span>
+        <button size-="small" variant-="foreground0" id="wsBrowserClose" title="Close" aria-label="Close workspace browser">x</button>
+      </row>
+      <row align-="center">
+        <button size-="small" variant-="background1" id="wsBrowserUp" title="Parent directory" aria-label="Parent directory">↑</button>
+        <span is-="badge" variant-="background1" id="wsBrowserPath">~</span>
+      </row>
+      <div id="wsBrowserError"></div>
+      <div box-="square" id="wsBrowserListWrap">
+        <div id="wsBrowserList"></div>
+      </div>
+      <row align-="end">
+        <button size-="small" variant-="foreground0" id="wsBrowserCancel" title="Cancel" aria-label="Cancel">Cancel</button>
+        <button size-="small" id="wsBrowserUse" title="Open this folder" aria-label="Open this folder">Open this folder</button>
+      </row>
+      <separator is-="separator" cap-="bisect"></separator>
+      <row align-="center">
+        <input id="inputWorkspacePath" placeholder="/path/to/project" autocomplete="off" aria-label="Workspace path">
+      </row>
+      <row align-="end">
+        <button size-="small" id="btnConfirmWorkspaceModal" title="Open path" aria-label="Open path">Open path</button>
+      </row>
+    </div>
+  </dialog>
+
+  <!-- 启动/脚本错误显示位（默认隐藏，由 js/boot-guard.js 填内容） -->
+  <div id="bootError" hidden></div>
+
+  <!-- ============================ 主体 ============================ -->
+  <row self-="grow">
+
+    <!-- ---------- 左：文件树 ---------- -->
+    <nav box-="square" shear-="top" id="sidebar">
+      <row align-="center between" id="sidebar-root">
+        <span is-="badge" variant-="background1">&#xf07b; <span id="explorerRoot">workspace</span></span>
+        <span is-="badge" variant-="background2" id="treeCount">0</span>
+      </row>
+      <column box-="round" id="tree-filter-wrap">
+        <input id="treeFilter" placeholder="Filter" autocomplete="off" aria-label="Filter file tree">
+      </column>
+      <div id="category-container">
+        <div id="category-list"></div>
+      </div>
+      <row box-="square" shear-="top" align-="between" id="sidebar-actions">
+        <span is-="tooltip">
+          <button is-="tooltip-trigger" size-="small" variant-="background0" id="nav-btn-new-file" title="New file" aria-label="New file">+f</button>
+          <span is-="tooltip-content" position-="top baseline-left" box-="square">New file</span>
+        </span>
+        <span is-="tooltip">
+          <button is-="tooltip-trigger" size-="small" variant-="background0" id="nav-btn-new-folder" title="New directory" aria-label="New directory">+d</button>
+          <span is-="tooltip-content" position-="top baseline-left" box-="square">New directory</span>
+        </span>
+        <span is-="tooltip">
+          <button is-="tooltip-trigger" size-="small" variant-="background0" id="nav-btn-refresh" title="Reload tree" aria-label="Reload tree">r</button>
+          <span is-="tooltip-content" position-="top baseline-left" box-="square">Reload tree</span>
+        </span>
+        <span is-="tooltip">
+          <button is-="tooltip-trigger" size-="small" variant-="background0" id="btnCollapseAll" title="Collapse all" aria-label="Collapse all">&#xf102;</button>
+          <span is-="tooltip-content" position-="top baseline-left" box-="square">Collapse all</span>
+        </span>
+        <span is-="tooltip">
+          <button is-="tooltip-trigger" size-="small" variant-="background0" id="nav-btn-zen" title="Zen mode" aria-label="Zen mode">z</button>
+          <span is-="tooltip-content" position-="top baseline-left" box-="square">Zen mode</span>
+        </span>
+        <span is-="tooltip">
+          <button is-="tooltip-trigger" size-="small" variant-="background0" id="nav-btn-find" title="Find file" aria-label="Find file">/</button>
+          <span is-="tooltip-content" position-="top baseline-left" box-="square">Find file</span>
+        </span>
+      </row>
+    </nav>
+
+    <!-- ---------- 右：编辑器 ---------- -->
+    <article box-="square" shear-="top" id="editorArticle">
+      <header is-="row" align-="between">
+        <row align-="center">
+          <span is-="badge" variant-="background1"><h1 id="activeDocTitle">Neovim</h1></span>
+          <span is-="badge" variant-="background3" id="activeDocPath">no file</span>
+        </row>
+        <span is-="separator" direction-="y" cap-="edge"></span>
+        <row align-="center" id="editor-header-right">
+          <row align-="center" id="buffer-tabs"></row>
+          <span is-="badge" variant-="background2" id="bufferCount">0</span>
+          <button size-="small" variant-="background1" id="btnNewBuffer" title="New buffer" aria-label="New buffer">+</button>
+          <span is-="badge" variant-="background1" id="wsStatusBadge">Connecting</span>
+        </row>
+      </header>
+
+      <row self-="grow" id="editor-body">
+        <!-- 终端：官方 view / view-content（宽高自动按 ch·lh 取整对齐） -->
+        <column is-="view" self-="grow">
+          <div is-="view-content" id="nvimTerminal"></div>
+        </column>
+      </row>
+    </article>
+
+  </row>
+
+  <!-- ============================ 状态栏 ============================ -->
+  <row align-="between" id="statusline">
+    <row align-="center">
+      <span is-="badge" variant-="background2" id="statusMode">NORMAL</span>
+      <span is-="badge" variant-="foreground0" cap-^="slant-top" cap-$="slant-bottom" id="zenBadge" hidden>ZEN</span>
+      <span>&#xf07b; <span id="statusWorkspace">workspace</span></span>
+      <span id="statusBuffer">[No Name]</span>
+    </row>
+    <row align-="center" id="statusRight">
+      <span is-="badge" variant-="background1" id="statusConnection">Connecting</span>
+      <button size-="small" variant-="background2" id="btnReconnect" title="Reconnect terminal" aria-label="Reconnect terminal" hidden>Reconnect</button>
+      <span id="statusCursor">1:1</span>
+      <span id="statusFiletype" hidden>text</span>
+      <span id="statusWritable">utf-8</span>
+    </row>
+  </row>
+</column>
+
+
+<!-- =====================================================================
+     弹窗：全部使用官方 dialog 组件 + div[box-] 内容框
+     ===================================================================== -->
+
+<!-- 新建文件 / 目录 -->
+<dialog id="newItemDialog" size-="small" position-="center" container-="fill auto">
+  <div box-="round" shear-="top">
+    <row align-="between">
+      <span is-="badge" variant-="background1" id="newItemDialogTitle">New file</span>
+      <button size-="small" variant-="foreground0" id="btnCloseNewItemDialog" title="Close" aria-label="Close new item">x</button>
+    </row>
+    <row align-="start">
+      <span is-="badge" variant-="foreground2" id="newItemHint">.</span>
+    </row>
+    <label id="newItemPromptLabel" for="inputNewItemName">File name</label>
+    <column box-="round">
+      <input id="inputNewItemName" placeholder="index.js" autocomplete="off">
+    </column>
+    <div id="newItemError"></div>
+    <row align-="end">
+      <button size-="small" variant-="foreground0" id="btnCancelNewItem" title="Cancel" aria-label="Cancel">Cancel</button>
+      <button size-="small" id="btnConfirmNewItem" title="Create" aria-label="Create">Create</button>
+    </row>
+  </div>
+</dialog>
+
+<!-- 设置 -->
+<dialog id="settingsDialog" size-="default" position-="center" container-="fill auto">
+  <div box-="round" shear-="top">
+    <row align-="between">
+      <span is-="badge" variant-="background1">Settings</span>
+      <button size-="small" variant-="foreground0" id="btnCloseSettings" title="Close" aria-label="Close settings">x</button>
+    </row>
+
+    <column box-="round" gap-="1">
+      <row align-="start">
+        <span is-="badge" variant-="background2">Editor</span>
+      </row>
+      <label>Font size <span is-="badge" variant-="background1" id="settingFontSizeDisplay">18px</span></label>
+      <input type="range" id="settingFontSizeRange" min="12" max="28" step="1" value="18" bar-="thick">
+
+      <label>Line height <span is-="badge" variant-="background1" id="settingLineHeightDisplay">1.40</span></label>
+      <input type="range" id="settingLineHeightRange" min="1.0" max="2.0" step="0.05" value="1.4" bar-="thick">
+
+      <separator is-="separator" cap-="bisect"></separator>
+
+      <row align-="start">
+        <span is-="badge" variant-="background2">Cursor</span>
+      </row>
+      <label>Cursor style</label>
+      <row gap-="2">
+        <label><input type="radio" name="cursorStyle" value="block" checked>Block</label>
+        <label><input type="radio" name="cursorStyle" value="underline">Underline</label>
+        <label><input type="radio" name="cursorStyle" value="bar">Bar</label>
+      </row>
+
+      <label><input type="checkbox" id="settingCursorBlink" is-="switch" checked>Cursor blinking</label>
+    </column>
+
+    <row align-="between">
+      <button size-="small" variant-="foreground0" id="btnResetSettings" title="Reset to defaults" aria-label="Reset settings">Reset</button>
+      <button size-="small" id="btnSaveSettings" title="Save settings" aria-label="Save settings">Done</button>
+    </row>
+  </div>
+</dialog>
+
+<!-- 文档 / 快捷键 -->
+<dialog id="keymapDialog" size-="default" position-="center" container-="fill auto">
+  <div box-="round" shear-="top">
+    <row align-="between">
+      <span is-="badge" variant-="background1">Docs &amp; keymaps</span>
+      <button size-="small" variant-="foreground0" id="btnCloseKeymap" title="Close" aria-label="Close docs">x</button>
+    </row>
+    <table divide-="both" box-="square">
+      <thead>
+        <tr><th>Key</th><th>Action</th><th>Group</th></tr>
+      </thead>
+      <tbody id="keymapTableBody"></tbody>
+    </table>
+  </div>
+</dialog>
+
+<!-- 未保存修改守护 -->
+<dialog id="unsavedGuardDialog" size-="small" position-="center" container-="fill auto">
+  <div box-="round" shear-="top">
+    <row align-="between">
+      <span is-="badge" variant-="background1">Unsaved changes</span>
+      <button size-="small" variant-="foreground0" id="btnCloseUnsavedDialog" title="Close" aria-label="Close unsaved changes">x</button>
+    </row>
+    <p id="unsavedGuardMessage">This buffer has unsaved changes.</p>
+    <row align-="end">
+      <button size-="small" variant-="foreground0" id="btnUnsavedCancel" title="Cancel" aria-label="Cancel">Cancel</button>
+      <button size-="small" variant-="background2" id="btnUnsavedDiscard" title="Discard changes" aria-label="Discard changes">Discard</button>
+      <button size-="small" id="btnUnsavedSaveClose" title="Save and close" aria-label="Save and close">Save &amp; close</button>
+    </row>
+  </div>
+</dialog>
+
+<!-- Toast：官方 dialog[popover] -->
+<dialog id="toastDialog" popover="manual" box-="round" shear-="top" position-="end end" container-="auto">
+  <div id="toastList"></div>
+</dialog>
+
+<script type="module" src="app.js?v=32.0.0"></script>
+</body>
+</html>

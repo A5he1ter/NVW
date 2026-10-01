@@ -1,0 +1,477 @@
+@layer base, utils, components, nvw;
+
+/* ==========================================================================
+   NVW · 样式表
+   --------------------------------------------------------------------------
+   第 1~4 节：官方 WebTUI 组件库 / 插件 / 主题（原样引入，不做任何改写）
+   第 5 节：官方 :root 变量覆盖（官方 Theming 文档指定的定制入口）
+   第 6 节：应用外壳规则
+            与官方文档站 https://webtui.ironclad.sh 自身的写法一一对应：
+            · 视口骨架   body,html{width:100vw;height:100vh;display:flex;flex-direction:column}
+            · 侧栏滚动   #sidebar{overflow:hidden} + #category-list{position:absolute;overflow:auto}
+            · 链接配色   color:var(--foreground2); text-decoration:none
+            除本节外，页面视觉全部由官方组件的 box- / is- / variant- 属性提供。
+   ========================================================================== */
+
+/* ---- 1. 官方组件全集 ---- */
+@import './webtui/css/full.css';
+
+/* ---- 2. 官方插件 ---- */
+@import './webtui/plugin-declarative-layout/index.css';
+@import './webtui/plugin-nf/index.css';
+
+/* ---- 3. 官方主题插件 ---- */
+@import './webtui/theme-catppuccin/index.css';
+@import './webtui/theme-nord/index.css';
+@import './webtui/theme-gruvbox/index.css';
+@import './webtui/theme-everforest/index.css';
+@import './webtui/theme-vitesse/index.css';
+@import './webtui/theme-osmium/index.css';
+
+/* ---- 5. 官方变量覆盖（取值对齐官方文档站 :root） ---- */
+@layer base {
+  :root {
+    --font-family: "JetBrains Mono", "JetBrainsMono Nerd Font Mono", Menlo, Monaco, monospace, "Symbols Nerd Font";
+    --font-size: 18px;
+    /* 网格专用字号：由 JS 按"铺满编辑器区域"缩放，不影响 WebTUI 组件字号 */
+    --base-font-size: 18px;
+    --term-font-size: var(--base-font-size);
+    --line-height: 1.4;
+    --box-border-color: var(--background1);
+    --dialog-offset-x: 2ch;
+    --dialog-offset-y: 2lh;
+  }
+}
+
+/* ---- 6. 应用外壳 ---- */
+@layer nvw {
+  /* 视口骨架（官方文档站 global.css 同款三行）。
+     R2-8：100vw/100vh 在存在滚动条时会宽于可视区（引入横向滚动与空隙），
+     改用 100% 跟随包含块，并加 overflow:hidden 兜底。 */
+  body, html {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* 官方组件给 badge/spinner/button 显式声明了 display:inline-flex|inline-block，
+     会盖掉浏览器对 [hidden] 的 display:none。契约 §2.6/§2.7 的
+     #zenBadge / #btnReconnect / #searchSpinner 都靠 hidden 控制显隐，这里统一修回。
+     nvw 是层叠顺序最后一层，同特异性即可胜出。 */
+  [hidden] { display: none; }
+
+  /* 顶栏：官方文档站同款一行布局 */
+  #topbar {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+  }
+  #home-link {
+    flex-shrink: 0;
+    white-space: nowrap;
+    color: var(--foreground1);
+    text-decoration: none;
+    font-weight: var(--font-weight-bold);
+  }
+  #home-link span:first-of-type { color: var(--blue, var(--foreground1)); }
+
+  #links {
+    align-items: center;
+    gap: 2ch;
+    flex-shrink: 0;
+  }
+  #links button { gap: 1ch; }
+
+  /* 启动错误显示块：只在 JS 出问题时出现，平时 hidden */
+  #bootError {
+    flex-shrink: 0;
+    padding: 1lh 1ch;
+    background-color: var(--background1);
+    color: var(--foreground0);
+    font-weight: var(--font-weight-bold);
+    word-break: break-all;
+    max-height: 8lh;
+    overflow-y: auto;
+  }
+
+  /* 侧栏：外层裁切 + 内层滚动，官方文档站同款结构 */
+  #sidebar {
+    display: flex;
+    flex-direction: column;
+    width: 32ch;
+    flex-shrink: 0;
+    overflow: hidden;
+  }
+  #category-container { flex-grow: 1; position: relative; min-height: 0; }
+  #category-list {
+    position: absolute;
+    inset: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  /* R2-4 侧栏脚栏：官方 box-="square" shear-="top" 提供框线，
+     按钮为背景同色的幽灵态（variant-="background0"），靠文字成形。
+     上下各留 1lh，按钮行在框线内垂直居中。 */
+  #sidebar-actions { padding-top: 1lh; }
+
+  /* 文件树：配色与官方文档站侧栏一致 */
+  #category-list summary {
+    cursor: pointer;
+    font-weight: var(--font-weight-bold);
+    white-space: nowrap;
+  }
+  /* 缩进完全交给官方 accordion 的 [open]::details-content{padding-left:2ch}，
+     这里不再叠加 ul 缩进，否则每层 ~3.2ch，三层就把文件名挤到截断 */
+  #category-list ul { margin: 0; padding-left: 0; }
+  /* li 是 flex 容器，会把 "├ " 尾随空格当 flex 边界吃掉；
+     用 gap 补回分支符与文件图标之间的间距 */
+  #category-list ul li {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5ch;
+    min-width: 0;
+  }
+  #category-list ul a {
+    flex: 1;
+    min-width: 0;
+    color: var(--foreground2);
+    text-decoration: none;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  #category-list ul a[data-active="true"] {
+    color: var(--foreground0);
+    font-weight: var(--font-weight-bold);
+  }
+  #category-list summary:hover,
+  #category-list ul a:hover { color: var(--foreground0); }
+
+  /* 编辑器：纵向弹性，终端撑满剩余空间 */
+  #editorArticle {
+    display: flex;
+    flex-direction: column;
+    flex-grow: 1;
+    min-width: 0;
+  }
+  #editor-body { display: flex; flex-grow: 1; min-height: 0; }
+  /* 渲染面：字符网格 = DOM 文本。定位用 ch/lh 单位，天然与字符对齐，
+     所以不再需要 DPI 校准 / 字宽测量 / 行高补偿那一整套补丁。 */
+  /* 渲染面挂在官方的 view-content 上：官方规则已经给了
+     position:absolute + translate(-50%,-50%) + width/height: round(down,100%,1ch/1lh)，
+     也就是"居中 + 宽高吸附到整字符/整行"。这里**只叠字体与网格相关属性**，
+     绝不要再覆盖 position/transform，否则整块会偏移半个身位并把外壳顶穿
+     （实测：状态栏被挤出视口 82px、外壳 scrollHeight 超视口）。
+     官方盒子高度本身就是 1lh 的整数倍 → 网格正好铺满，底部零留白。 */
+  #nvimTerminal {
+    overflow: hidden;
+    white-space: pre;
+    word-break: normal;
+    font-family: var(--font-family);
+    font-size: var(--term-font-size, 18px);
+    line-height: var(--line-height, 1.4);
+    background-color: var(--background0);
+    color: var(--foreground0);
+  }
+  #nvimTerminal [data-nvw-layer] { display: block; }
+  /* 每行固定一个 lh 高，超出裁掉（绝不换行，换行会在网格里造成错位） */
+  #nvimTerminal [data-nvw-layer] > div {
+    height: 1lh;
+    white-space: pre;
+    overflow: hidden;
+  }
+  /* 光标：difference 混合 = 真·反色块，压在任何底色上都对 */
+  #nvimTerminal [data-nvw-cursor] {
+    position: absolute;
+    pointer-events: none;
+    mix-blend-mode: difference;
+  }
+  /* 字符度量探针与键盘/IME 承接口：都不参与布局 */
+  #nvimTerminal [data-nvw-probe] {
+    position: absolute;
+    left: -9999px;
+    top: 0;
+    visibility: hidden;
+    white-space: pre;
+  }
+  #nvimTerminal [data-nvw-input] {
+    position: absolute;
+    left: -9999px;
+    top: 0;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    border: 0;
+    opacity: 0;
+    resize: none;
+  }
+
+  /* R2-5 状态栏：改为满幅实底条——去掉官方 box-（不再有贴死窗口边的框线），
+     用 --background1 实底 + 左右各 1ch 内边距；gap 取 1ch 整数格避免半格错位。 */
+  #statusline {
+    align-items: center;
+    gap: 2ch;
+    flex-shrink: 0;
+    padding: 0 1ch;
+    background-color: var(--background1);
+  }
+  #statusline > row { gap: 1ch; }
+  #statusline span { white-space: nowrap; }
+
+  /* 文件树根行：左路径徽标（省略号） + 右可见节点计数 */
+  #sidebar-root {
+    justify-content: space-between;
+    gap: 1ch;
+    padding-bottom: 1lh;
+    flex-shrink: 0;
+  }
+  #explorerRoot {
+    display: block;
+    max-width: 20ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  #treeCount { flex-shrink: 0; }
+
+  /* 树过滤框：贴合 32ch 侧栏宽度，不撑破框线 */
+  #tree-filter-wrap {
+    flex-shrink: 0;
+    margin-bottom: 1lh;
+  }
+  #treeFilter {
+    width: 100%;
+    min-width: 0;
+  }
+
+  /* 编辑器头部：左（标题 + 相对路径）、右（标签页 + 计数 + 新建 + 连接态）。
+     坑：官方 align-="center" 会**同时**命中 [align-^=center]（align-items:center）
+     与 [align-$=center]（justify-content:center）——内容一旦超宽就向两侧溢出，
+     实测 9 个标签时标题被左边缘裁掉 23px。这里把 justify 显式拉回 flex-start，
+     并让左组不参与压缩（压缩全部交给可横向滚动的 #buffer-tabs）。 */
+  #editorArticle > header > row:first-of-type {
+    align-items: center;
+    justify-content: flex-start;
+    gap: 1ch;
+    min-width: 0;
+    flex-shrink: 0;
+  }
+  #editorArticle > header > row:first-of-type > span:first-of-type { flex-shrink: 0; }
+  #editor-header-right {
+    gap: 1ch;
+    min-width: 0;
+    flex-shrink: 1;
+    justify-content: flex-start;
+  }
+
+  /* 徽标里的路径：badge 是 inline-flex，text-overflow 对匿名 flex 项不生效，
+     改用 inline-block 让超长路径以省略号收尾（高度仍锁 1lh，不裁切）。
+     :not([hidden]) 不可省：ID 选择器特异性高于 [hidden]{display:none}，
+     否则 tabs.js 对无名 buffer 设的 hidden 会被顶掉，渲染出一个 20px 残块。 */
+  #activeDocPath:not([hidden]),
+  #wsBrowserPath:not([hidden]),
+  #search-count:not([hidden]) {
+    display: inline-block;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  #activeDocPath { max-width: 24ch; flex-shrink: 1; }
+  /* R2-7 路径徽标「尾部可见」改由 JS 的 tailPath() 做（`…/public/webtui/plugin-x`）。
+     曾经用 direction:rtl + text-align:left 实现，但 bidi 会把路径开头的 `/` 重排到行尾
+     （显示成 `…plugin-x/`），并且让 DOM 文本不再是可解析的路径 —— Lead 裁定改用 JS 截尾。
+     这里只保留不压缩的伸缩约束。 */
+  #wsBrowserPath {
+    flex-shrink: 1;
+    text-align: left;
+  }
+  /* 计数徽标不压缩：Lead 实测 "showing 200 …" 被省略号吃掉，故 flex-shrink: 0。
+     max-width: 13ch 是防御性上界，推导（单位 ch，勿删）：
+       状态行可用宽 = dialog[size-="small"] 48ch − 内层 div[box-] 左右 padding 2ch = 46ch
+       状态行占用   = spinner 1ch + gap 1ch + 计数 ≤13ch + gap 1ch + 快捷键提示 30ch = 46ch
+     提示文案（"↑↓ move · ↵ open · Esc close" = 28 字符 + 徽标两端 cap 2ch = 30ch）
+     与 spinner 宽度都由官方组件固定，因此把「计数」钉在 13ch 上即可保证该行永不溢出；
+     正常文案（如 "200 / 219+" = 10ch）完整显示，只有极端长文案才省略号收尾。 */
+  #search-count {
+    flex-shrink: 0;
+    max-width: 13ch;
+  }
+
+  /* 头部左组与标签栏之间的官方纵向分隔线（避免标题/路径被误读成第二个 tab） */
+  #editorArticle > header > span[is-~="separator"] { margin: 0 1ch; }
+
+  /* R2-3 标签条：容器吃满剩余宽度（max-width:none，不再用 62ch 上限），
+     溢出时出现**可见可拖**的细滚动条——之前 display:none 藏掉滚动条，
+     用户没有任何抓手，7 个标签时选不中。 */
+  #buffer-tabs {
+    flex: 1 1 auto;
+    max-width: none;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--background3) transparent;
+    /* 关键：官方 `align-="center"` 会同时命中 align-items 与 justify-content（单个值既是前缀又是后缀），
+       于是容器变成 justify-content:center。内容溢出时居中会把溢出**均摊到两侧**，
+       而 LTR 下左侧溢出不属于可滚动区域 → 前几个标签永远够不着（用户报的"选不了其他标签"）。
+       必须钉死为 flex-start，溢出才能全部落在可滚动的右侧。 */
+    justify-content: flex-start;
+  }
+  /* 单个 tab 的 label 按钮限宽，超长文件名省略号收尾（标签条才不会被一个名字撑爆） */
+  #buffer-tabs button[data-bufnr] {
+    max-width: 22ch;
+    overflow: hidden;
+  }
+  /* tabs.js 生成的 label 槽：块级 + 省略号，图标与名字都落在这一个盒子里 */
+  [data-tab-label] {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  #buffer-tabs > row {
+    align-items: center;
+    gap: 0;
+    flex-shrink: 0;
+  }
+  #buffer-tabs > row + row { margin-left: 1ch; }
+  #buffer-tabs > row + row::before {
+    content: "│";
+    color: var(--background3);
+    margin-right: 1ch;
+  }
+
+  /* R2-7 目录浏览器：子目录列表套一层官方框线滚动容器；
+     列表项与底部动作行同宽同左边缘（动作行给同样的 1ch 内缩）。 */
+  #wsBrowserListWrap {
+    flex-shrink: 0;
+    min-height: 0;
+  }
+  #wsBrowserListWrap > #wsBrowserList { max-height: 9lh; }
+  #wsBrowserList {
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    overflow-x: hidden;
+    max-height: 10lh;
+    min-height: 0;
+  }
+  #wsBrowserList button {
+    justify-content: flex-start;
+    flex-shrink: 0;
+    overflow: hidden;
+    width: 100%;
+  }
+  /* 动作行/输入行与列表内容同左边距（列表框自身有 1ch 内边距） */
+  #workspaceBrowserDialog row { padding: 0 1ch; }
+  #inputWorkspacePath {
+    width: 100%;
+    min-width: 0;
+  }
+  #wsBrowserError,
+  #newItemError {
+    color: var(--red, var(--foreground0));
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  /* 暗色 TUI 滚动条：系统亮色默认轨道会在暗色面板上拉出一条高亮白条。
+     统一用官方色板 --background3 作 thumb、轨道透明（只写 background-color，
+     不用 background 简写，避免引入渐变字面量）。 */
+  #category-list,
+  #search-results-container,
+  #wsBrowserList,
+  #buffer-tabs {
+    scrollbar-width: thin;
+    scrollbar-color: var(--background3) transparent;
+  }
+  #category-list::-webkit-scrollbar,
+  #search-results-container::-webkit-scrollbar,
+  #wsBrowserList::-webkit-scrollbar,
+  #buffer-tabs::-webkit-scrollbar {
+    width: 1ch;
+    height: 1ch;
+  }
+  #category-list::-webkit-scrollbar-thumb,
+  #search-results-container::-webkit-scrollbar-thumb,
+  #wsBrowserList::-webkit-scrollbar-thumb,
+  #buffer-tabs::-webkit-scrollbar-thumb {
+    background-color: var(--background3);
+  }
+  #category-list::-webkit-scrollbar-track,
+  #search-results-container::-webkit-scrollbar-track,
+  #wsBrowserList::-webkit-scrollbar-track,
+  #buffer-tabs::-webkit-scrollbar-track {
+    background-color: transparent;
+  }
+
+  /* 弹层里的菜单项：官方按钮默认居中，菜单应左对齐 */
+  dialog[popover] column button {
+    justify-content: flex-start;
+  }
+
+  /* R2-6 工作区弹层：统一最小宽度，列表 / 分隔线 / 动作行占满同一宽度；
+     动作行与标题行再内缩 1ch，与带框列表内的条目文字同一条左轴
+     （列表框自身有 1ch 内边距，不补这一格就会出现「Browse… 比列表项左移 1ch」的参差） */
+  #workspacePanel {
+    min-width: 26ch;
+  }
+  #workspacePanel row { padding: 0 1ch; }
+
+  /* 官方 tooltip 组件本身不带背景，官方文档示例同样由使用方补背景色；
+     另外 WebTUI 全局 word-break:break-all 会把浮层文字逐字折断，需 nowrap */
+  [is-~="tooltip-content"] {
+    background-color: var(--background0);
+    white-space: nowrap;
+    word-break: normal;
+  }
+
+  /* 查找结果：独立滚动容器（官方站把滚动加在列表上，保持 dialog 框线完整） */
+  #search-results { overflow: hidden; min-height: 0; }
+  #search-results-container {
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    max-height: 10lh;
+  }
+  /* 关键：容器设了 max-height，166 个按钮作为 flex 项会被强制收缩到 ~1px 高，
+     文字溢出互相叠印。必须禁止收缩，让容器滚动而不是压缩条目。 */
+  #search-results-container button {
+    justify-content: flex-start;
+    flex-shrink: 0;
+    overflow: hidden;
+  }
+  /* 查找弹窗状态行：spinner / 计数 / 快捷键提示一行内不溢出。
+     提示徽标永不压缩（它是可读性刚需），计数徽标吃掉剩余宽度并省略号收尾
+     （#search-count 前一条规则已给 flex-shrink:1，此处不得再用整行通配覆盖）。 */
+  #search-content > row { gap: 1ch; min-width: 0; }
+  #search-content > row > span[is-~="badge"]:last-child { flex-shrink: 0; }
+
+  /* 其他弹窗正文兜底：内容超高时内部滚动，不裁切、不撑破框线 */
+  dialog[size-="default"] > [box-] {
+    overflow-y: auto;
+    max-height: 20lh;
+  }
+
+  /* 官方 Catppuccin 等主题带 h1{color:var(--red)}（面向 markdown 正文标题），
+     会盖掉徽标前景色，让编辑器标题变成玫红裸字；这里是徽标内容，必须继承。
+     同时给它一个 28ch 上限：超长文件名此前会把标签栏挤到只剩几十像素，
+     这里以省略号收尾（同 #activeDocPath 的 inline-block 处理）。 */
+  #activeDocTitle {
+    color: inherit;
+    display: inline-block;
+    max-width: 28ch;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* 官方 separator 是 inline-flex，落在块级容器（模态内层 div）里宽度会塌成 0；
+     统一按块级铺满整行。flex column 容器内的 stretch 行为不受影响。 */
+  separator[is-~="separator"] { display: flex; }
+}
