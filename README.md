@@ -66,28 +66,22 @@ http://127.0.0.1:3999
 也可以使用配套的 CLI 工具便捷启动：
 
 ```bash
-# 在当前目录直接启动并弹出浏览器
+# 全局安装或软链后（npm link），可以直接使用 nvw 命令：
+nvw                           # 在当前目录直接启动并弹出浏览器
+nvw ./src                     # 打开当前项目的子目录
+nvw /path/to/project          # 打开指定工作区路径
+nvw web /path/to/project      # 显式使用 web 子命令
+nvw run --here                # 控制台前台模式运行（不自动弹出浏览器）
+nvw open                      # 启动并确保打开系统默认浏览器
+nvw -p 5000                   # 指定在 5000 端口启动
+nvw -H 0.0.0.0                # 指定监听主机
+nvw restart                   # 重启当前端口的服务
+nvw status                    # 检查服务运行状态与工作区
+nvw stop                      # 优雅停止运行中的服务
+
+# 未全局安装时，也可以直接执行项目内的脚本：
 ./bin/nvw.js
-
-# 打开指定工作区并在浏览器中查看
-./bin/nvw.js /path/to/project
-# 或标准 web 子命令
 ./bin/nvw.js web /path/to/project
-
-# 作为控制台前台服务运行（不弹浏览器）
-./bin/nvw.js run --here
-
-# 指定端口启动
-./bin/nvw.js -p 5000
-
-# 重启当前端口的服务
-./bin/nvw.js restart
-
-# 检查服务运行状态
-./bin/nvw.js status
-
-# 优雅停止运行中的服务
-./bin/nvw.js stop
 ```
 
 ---
