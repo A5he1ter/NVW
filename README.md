@@ -63,19 +63,30 @@ pnpm start
 http://127.0.0.1:3999
 ```
 
-也可以使用配套的 CLI 工具：
+也可以使用配套的 CLI 工具便捷启动：
 
 ```bash
+# 在当前目录直接启动并弹出浏览器
+./bin/nvw.js
+
 # 打开指定工作区并在浏览器中查看
+./bin/nvw.js /path/to/project
+# 或标准 web 子命令
 ./bin/nvw.js web /path/to/project
 
-# 指定端口启动
-./bin/nvw.js web -p 5000
+# 作为控制台前台服务运行（不弹浏览器）
+./bin/nvw.js run --here
 
-# 检查服务状态
+# 指定端口启动
+./bin/nvw.js -p 5000
+
+# 重启当前端口的服务
+./bin/nvw.js restart
+
+# 检查服务运行状态
 ./bin/nvw.js status
 
-# 停止服务
+# 优雅停止运行中的服务
 ./bin/nvw.js stop
 ```
 
