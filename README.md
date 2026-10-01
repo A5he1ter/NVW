@@ -1,180 +1,150 @@
 # NVW (Neovim Web)
 
-<p align="center">
-  <strong>纯净、极简的本地 Neovim Web 工作台。遵循 <a href="https://webtui.ironclad.sh/">WebTUI</a> 官方规范构建，直连本机 Neovim 实例。</strong>
-</p>
-
-<p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
-  <img src="https://img.shields.io/badge/Neovim-0.9%2B-57A143?logo=neovim&logoColor=white" alt="Neovim">
-  <img src="https://img.shields.io/badge/Node.js-%3E%3D18.0.0-339933?logo=node.js&logoColor=white" alt="Node.js">
-  <img src="https://img.shields.io/badge/WebTUI-Compliant-8A2BE2" alt="WebTUI">
-</p>
+NVW 是一个运行在浏览器里的本地 Neovim 工作台，基于 [WebTUI](https://webtui.ironclad.sh/) 规范构建，直接连接本机的 Neovim 进程。
 
 ---
 
-## 💡 为什么做 NVW？
+## 背景与设计
 
-在浏览器中使用 Neovim 通常有两种传统方案：
-1. **基于 PTY + 终端模拟器 (如 xterm.js)**：容易遇到 VT 转义序列解析、DPR 缩放发虚、字符间距抖动及字符度量不准等问题。
-2. **基于 Web 编辑器核心 (如 Monaco/CodeMirror) 模拟 Vim 键位**：缺乏原生 Neovim 的真实配置、Lua 插件生态以及撤销树和宏等完整底层能力。
+在浏览器里使用 Neovim 通常有两类做法：
 
-**NVW 采用全新主链架构**：
-- **直连核心**：通过 `nvim --embed` 的常驻 msgpack-RPC 协议与本机真实安装的 Neovim 通信。Neovim 始终是文本状态、模式、编辑操作、撤销树与插件的权威来源。
-- **WebTUI 原生美学**：界面完全采用 WebTUI 官方声明式布局与框线组件构建，零私写乱序样式。
-- **行级 DOM 网格渲染**：将 UI 事件映射为原生 DOM 行与字符节点，文本排版交给现代浏览器渲染引擎，字形原生清晰、零间隙、极低延迟。
+1. **PTY 加终端模拟器（如 xterm.js）**：容易出现转义字符解析偏差、屏幕缩放字形模糊、字符宽度与行高不对齐等问题。
+2. **Web 编辑器模拟 Vim 键位（如 Monaco 或 CodeMirror）**：无法使用本机的 init.lua/init.vim 配置、Lua 插件生态以及完整的底层撤销树和宏。
 
----
+NVW 采用如下架构：
 
-## ✨ 核心特性
-
-- 🚀 **真实 Neovim 驱动**：加载你的本地配置 (`~/.config/nvim`) 与插件，原生支持宏录制、寄存器、撤销重做与分屏操作。
-- 🖥️ **完整 UI 协议解析**：准确遍历并消费 Neovim `redraw` 事件流（`grid_line`、`grid_scroll`、`hl_attr_define`、`default_colors_set`、`mode_info_set` 等），按 `flush` 边界帧级提交，无撕裂与旧屏残留。
-- 📁 **结构化工作区切换**：支持浏览并切换项目工作区，自动协调全局工作目录 (`cwd`) 与各分屏窗口的局部路径 (`lcd`/`tcd`)，并集成未保存修改防护拦截。
-- ⌨️ **现代编辑器交互**：
-  - 支持中文输入法（IME）平滑合成与单次精准提交。
-  - 内置 `:terminal` 终端画面渲染与命令交互。
-  - 原生代码补全下拉菜单与快捷选入。
-  - 动态行列尺寸自动适配（支持 1440×900、1024×768 及 390×844 移动端等视口）。
-- 🎨 **主题无缝融合**：支持 Catppuccin (Mocha / Latte)、Nord、Gruvbox、Everforest、Vitesse 等官方主题，编辑器配色与网页外壳高度一致。
-- 🔄 **断线快照恢复**：服务端权威镜像维护网格与高亮状态，页面刷新或断线重连时瞬间恢复全量快照，不丢内容、不白屏。
+- **直连后端**：通过 `nvim --embed` 建立常驻 msgpack-RPC 连接，Neovim 负责维护文本、模式、撤销树、插件与寄存器状态。
+- **WebTUI 界面**：布局与面板框线使用 WebTUI 官方组件与规则，不引入额外的独立 CSS 样式类。
+- **行级 DOM 渲染**：将 UI 事件转换为 DOM 行与文本节点，利用浏览器的字体排版引擎显示文本，避免 Canvas 在高分屏下的缩放模糊问题。
 
 ---
 
-## 🛠️ 快速开始
+## 主要功能
 
-### 依赖环境
+- 加载本机配置（`~/.config/nvim`）与插件，支持分屏、浮窗、宏录制与寄存器操作。
+- 完整消费 Neovim 的 `redraw` 事件流（包括 `grid_line`、`grid_scroll`、`hl_attr_define`、`default_colors_set`、`mode_info_set` 等），按 `flush` 边界更新画面。
+- 支持切换工作区目录，自动同步全局工作目录（`cwd`）与分屏窗口的局部工作目录（`lcd`/`tcd`），切换前检查未保存修改。
+- 中文输入法（IME）合成事件分发，避免字符重复或漏字。
+- 支持 `:terminal` 终端缓冲区与命令交互。
+- 弹出式代码补全菜单与选项插入。
+- 自动根据容器与基础字号适配行列数，支持桌面与移动端视口。
+- 内置 Catppuccin（Mocha / Latte）、Nord、Gruvbox、Everforest、Vitesse 等配色。
+- 服务端维护权威网格状态镜像，刷新页面或重连时下发完整快照。
 
-- [Node.js](https://nodejs.org/) (>= 18.0.0)
-- [Neovim](https://neovim.io/) (>= 0.9.0，推荐 0.10+)
-- [pnpm](https://pnpm.io/) (推荐) 或 npm / yarn
+---
 
-### 安装步骤
+## 环境要求
+
+- Node.js (>= 18.0.0)
+- Neovim (>= 0.9.0，建议 0.10+)
+- pnpm (推荐) 或 npm
+
+---
+
+## 安装与启动
 
 ```bash
-# 1. 克隆本仓库
+# 克隆仓库
 git clone https://github.com/A5he1ter/NVW.git
 cd NVW
 
-# 2. 安装项目依赖
+# 安装依赖
 pnpm install
-```
 
-### 启动服务
-
-```bash
-# 启动本地服务（默认端口 3999，绑定 127.0.0.1）
+# 启动服务（默认监听 127.0.0.1:3999）
 pnpm start
 ```
 
-服务就绪后，在浏览器中访问：
+启动后在浏览器打开：
 ```
 http://127.0.0.1:3999
 ```
 
-### 命令行工具 (CLI)
-
-NVW 自带 CLI 启动工具，支持便捷管理：
+也可以使用配套的 CLI 工具：
 
 ```bash
-# 在指定目录启动并自动在浏览器中打开
-./bin/nvw.js web /path/to/your/project
+# 打开指定工作区并在浏览器中查看
+./bin/nvw.js web /path/to/project
 
-# 在指定端口启动
+# 指定端口启动
 ./bin/nvw.js web -p 5000
 
-# 检查服务运行状态
+# 检查服务状态
 ./bin/nvw.js status
 
-# 停止正在运行的服务
+# 停止服务
 ./bin/nvw.js stop
 ```
 
 ---
 
-## ⌨️ 常用快捷键
+## 快捷键
 
-| 快捷键 | 功能描述 |
+| 快捷键 | 功能 |
 | :--- | :--- |
-| `Mod + K` (⌘K / Ctrl+K) | 模糊查找工作区文件 |
-| `Mod + Shift + F` | 快速聚焦左侧文件过滤输入框 |
-| `Mod + B` | 切换专注模式 (Zen Mode，隐藏侧栏与顶栏) |
-| `Mod + ,` | 打开设置面板（调整字号、行高、光标样式） |
-| `Mod + /` | 查看按键与文档速查表 |
-| `Mod + S` | 保存当前缓冲区文件 (`:write`) |
-| `Alt + W` | 安全关闭当前缓冲区（有未保存修改时弹窗提醒） |
-| `Alt + ↑` / `Alt + ↓` | 切换上一个 / 下一个已打开的标签页 |
-| `Mod + J` | 焦点快速回到 Neovim 编辑网格 |
-| `Esc` | 关闭当前弹窗 / 退出专注模式 |
+| `Mod + K` (⌘K / Ctrl+K) | 查找工作区文件 |
+| `Mod + Shift + F` | 聚焦侧栏文件过滤框 |
+| `Mod + B` | 切换专注模式（隐藏顶栏与侧栏） |
+| `Mod + ,` | 打开设置面板 |
+| `Mod + /` | 打开按键文档面板 |
+| `Mod + S` | 保存当前文件（`:write`） |
+| `Alt + W` | 关闭当前缓冲区（有修改时提示） |
+| `Alt + ↑` / `Alt + ↓` | 切换前一个 / 后一个缓冲区 |
+| `Mod + J` | 聚焦到编辑器网格 |
+| `Esc` | 退出弹窗或专注模式 |
 
 ---
 
-## 📐 系统架构
+## 系统结构
 
 ```text
 ┌────────────────────────────────┐
 │      浏览器客户端 (WebUI)        │
 │  · 行级 DOM 渲染 (grid-renderer) │
 │  · 输入与按键编码 (input.js)      │
-│  · WebTUI 外壳与弹窗组件        │
+│  · WebTUI 界面组件              │
 └───────────────▲────────────────┘
-                │ WebSocket (JSON 增量帧 / 状态快照)
+                │ WebSocket (JSON 增量帧 / 快照)
                 ▼
 ┌────────────────────────────────┐
-│     Node.js 本地后端服务        │
-│  · 会话管理 (ensureUiSession)    │
-│  · 权威网格状态镜像 (GridState)  │
+│     Node.js 本地服务            │
+│  · 会话生命周期管理             │
+│  · 网格状态镜像 (GridState)     │
 │  · 工作区协调与 REST API         │
 └───────────────▲────────────────┘
-                │ msgpack-RPC (常驻 stdio)
+                │ msgpack-RPC (stdio)
                 ▼
 ┌────────────────────────────────┐
-│    本机真实 Neovim 实例        │
-│     (nvim --embed)             │
-│  · 权威编辑状态、语法高亮、插件  │
+│      本机 Neovim 实例          │
+│       (nvim --embed)           │
+│  · 状态、高亮与插件管理         │
 └────────────────────────────────┘
 ```
 
 ---
 
-## 🧪 自动化测试
-
-项目内置了严格的规范纯度与行为测试套件：
+## 测试
 
 ```bash
-# 1. 运行 WebTUI 规范纯度静态审计（确保零自写样式、纯组件框线）
+# WebTUI 规范纯度审计
 pnpm test
 
-# 2. 运行 Neovim 核心编辑功能套件（写盘/撤销/宏/分屏/浮窗/终端/补全）
+# Neovim 核心编辑功能测试（写盘、撤销、宏、分屏、浮窗、终端、补全）
 node tests/test_e05_editing.mjs
 
-# 3. 运行浏览器端到端行为断言（IME合成、终端执行、补全落盘、重连恢复）
+# 浏览器端到端交互断言（IME、终端输出、补全落盘、状态保持）
 node tests/test_browser_interaction.mjs
 ```
 
 ---
 
-## 👥 贡献者 (Contributors)
+## 致谢与项目引用
 
-感谢所有参与 NVW 建设、代码编写、架构设计与审查测试的贡献者！
-
-- **[AShelter](https://github.com/A5he1ter)** - *Author & Maintainer*
-- **ChatGPT** - *Architecture Review & Code Verification*
-- **Gemini** - *Core Implementation & Lifecycle Engineering*
-
-欢迎提交 [Issue](https://github.com/A5he1ter/NVW/issues) 或 [Pull Request](https://github.com/A5he1ter/NVW/pulls) 参与贡献！
+- [WebTUI](https://webtui.ironclad.sh/) ([GitHub](https://github.com/ironclad/webtui))：提供 CSS 组件与声明式布局规范。
+- [Neovim](https://neovim.io/)：文本编辑核心与 msgpack-RPC UI 协议。
 
 ---
 
-## 💖 致谢与技术栈 (Acknowledgements)
+## 许可证
 
-本项目的前端界面与终端美学深度依赖并遵循以下优秀开源项目的规范与设计：
-
-- **[WebTUI](https://webtui.ironclad.sh/)** ([GitHub](https://github.com/ironclad/webtui))：提供官方 CSS 组件、声明式布局插件与 TUI 框线系统，是 NVW 前端终端风格视觉的基础。
-- **[Neovim](https://neovim.io/)**：现代、可扩展的文本编辑器核心，为本项目提供权威的编辑状态与 msgpack-RPC UI 协议。
-
----
-
-## 📄 开源许可证
-
-本项目采用 [MIT License](LICENSE) 开源许可证。
+[MIT License](LICENSE)
