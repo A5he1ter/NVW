@@ -10,9 +10,16 @@
     "start": "node server.js",
     "test": "node tests/test_audit.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": [
+    "neovim",
+    "nvim",
+    "webui",
+    "webtui",
+    "editor",
+    "terminal"
+  ],
+  "author": "AShelter",
+  "license": "MIT",
   "devEngines": {
     "packageManager": {
       "name": "pnpm",
