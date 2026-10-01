@@ -113,6 +113,7 @@ export function createFinder({ api, showToast, openPath, focusTerminal } = {}) {
       await openPath?.(file.path);
     } catch { /* api.js 已 toast，保持弹窗已关的干净状态 */ }
     focusTerminal?.();
+    setTimeout(() => focusTerminal?.(), 50);
   }
 
   function open() {

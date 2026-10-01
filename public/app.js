@@ -859,8 +859,11 @@ function initChrome() {
   $('btnUnsavedDiscard')?.addEventListener('click', () => { resolveUnsaved('discard'); });
   $('btnUnsavedSaveClose')?.addEventListener('click', () => { resolveUnsaved('save'); });
 
-  for (const id of ['settingsDialog', 'keymapDialog', 'unsavedGuardDialog', 'newItemDialog']) {
-    $(id)?.addEventListener('close', () => focusTerminal());
+  for (const id of ['settingsDialog', 'keymapDialog', 'unsavedGuardDialog', 'newItemDialog', 'search-dialog', 'workspaceBrowserDialog']) {
+    $(id)?.addEventListener('close', () => {
+      focusTerminal();
+      setTimeout(() => focusTerminal(), 50);
+    });
   }
 }
 
