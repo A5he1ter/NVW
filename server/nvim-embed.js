@@ -24,7 +24,11 @@ import os from 'node:os';
 
 const NVIM_BIN = fs.existsSync('/opt/homebrew/bin/nvim') ? '/opt/homebrew/bin/nvim' : 'nvim';
 
-/** 一次 Lua 拿全颜色表：id → 最终属性（link 已就地解析） */
+/** 一次 Lua 拿全颜色表：id (字符串) → 最终属性（link 已就地解析）
+ * 注意：在 Neovim 0.9.x 及更早版本的 msgpack-rpc 转换器中，含有整数键但存在空洞的 Lua table
+ * 会报错 "E5100: Cannot convert given lua table: table should either have a sequence of positive integer keys or contain only string keys"
+ * 将 groups[tostring(id)] 明确作为字符串键 map 序列化，兼容 Neovim 0.9.x ~ 0.12.x 全版本。
+ */
 const COLORS_LUA = `
 local all = vim.api.nvim_get_hl(0, {})
 local function resolve(def, depth)
@@ -35,7 +39,7 @@ local groups = {}
 for name, def in pairs(all) do
   local final = resolve(def, 0)
   local id = vim.api.nvim_get_hl_id_by_name(name)
-  groups[id] = {
+  groups[tostring(id)] = {
     name = name,
     fg = final.fg, bg = final.bg, sp = final.sp,
     bold = final.bold, italic = final.italic, underline = final.underline,
