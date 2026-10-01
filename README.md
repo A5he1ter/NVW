@@ -156,15 +156,11 @@ node tests/test_browser_interaction.mjs
 
 ## 👥 贡献者 (Contributors)
 
-感谢所有参与 NVW 建设与反馈的开发者！
-
-<!-- 
-你可以随时在此处添加团队成员、协作者或反馈者的头像与链接。
-示例格式：
-<a href="https://github.com/A5he1ter"><img src="https://github.com/A5he1ter.png" width="50" height="50" style="border-radius: 50%" alt="AShelter"/></a>
--->
+感谢所有参与 NVW 建设、代码编写、架构设计与审查测试的贡献者！
 
 - **[AShelter](https://github.com/A5he1ter)** - *Author & Maintainer*
+- **ChatGPT** - *Architecture Review & Code Verification*
+- **Gemini** - *Core Implementation & Lifecycle Engineering*
 
 欢迎提交 [Issue](https://github.com/A5he1ter/NVW/issues) 或 [Pull Request](https://github.com/A5he1ter/NVW/pulls) 参与贡献！
 
