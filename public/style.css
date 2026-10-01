@@ -97,13 +97,15 @@
     overflow-y: auto;
   }
 
-  /* 侧栏：外层裁切 + 内层滚动，官方文档站同款结构 */
+  /* 侧栏：外层溢出放行以允许脚栏 tooltip 悬浮跨界展示，内层滚动；
+     滚动区域严格由 #category-container 与 #category-list 负责裁切 */
   #sidebar {
     display: flex;
     flex-direction: column;
     width: 32ch;
     flex-shrink: 0;
-    overflow: hidden;
+    overflow: visible;
+    z-index: 10;
   }
   #category-container { flex-grow: 1; position: relative; min-height: 0; }
   #category-list {
@@ -424,11 +426,21 @@
   #workspacePanel row { padding: 0 1ch; }
 
   /* 官方 tooltip 组件本身不带背景，官方文档示例同样由使用方补背景色；
-     另外 WebTUI 全局 word-break:break-all 会把浮层文字逐字折断，需 nowrap */
+     另外 WebTUI 全局 word-break:break-all 会把浮层文字逐字折断，需 nowrap；
+     提升 z-index 并确保不受相邻兄弟容器遮挡 */
+  #sidebar-actions {
+    position: relative;
+    z-index: 15;
+  }
+  [is-~="tooltip"] {
+    position: relative;
+    z-index: 20;
+  }
   [is-~="tooltip-content"] {
     background-color: var(--background0);
     white-space: nowrap;
     word-break: normal;
+    z-index: 999 !important;
   }
 
   /* 查找结果：独立滚动容器（官方站把滚动加在列表上，保持 dialog 框线完整） */
