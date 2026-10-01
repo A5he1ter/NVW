@@ -92,6 +92,15 @@ pnpm test
 
 ---
 
+## 致谢与技术栈 (Acknowledgements)
+
+本项目的前端界面与终端美学深度依赖并遵循以下优秀开源项目的规范与设计：
+
+- **[WebTUI](https://webtui.ironclad.sh/)** ([GitHub](https://github.com/ironclad/webtui))：提供官方 CSS 组件、声明式布局插件与 TUI 框线系统，是 NVW 前端终端风格视觉的基础。
+- **[Neovim](https://neovim.io/)**：现代、可扩展的文本编辑器核心，为本项目提供权威的编辑状态与 msgpack-RPC UI 协议。
+
+---
+
 ## 开源许可
 
 [ISC License](package.json)
