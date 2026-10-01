@@ -181,11 +181,19 @@
     color: var(--foreground0);
   }
   #nvimTerminal [data-nvw-layer] { display: block; }
-  /* 每行固定一个 lh 高，超出裁掉（绝不换行，换行会在网格里造成错位） */
+  /* 每行固定一个 lh 高，超出裁掉（绝不换行，换行会在网格里造成错位）；
+     行内使用 flex 布局且子 span 高度填满 100%，彻底避免内联 span 因字体 baseline 导致的条纹空隙 */
   #nvimTerminal [data-nvw-layer] > div {
     height: 1lh;
+    display: flex;
+    align-items: stretch;
     white-space: pre;
     overflow: hidden;
+  }
+  #nvimTerminal [data-nvw-layer] > div > span {
+    display: inline-block;
+    height: 100%;
+    line-height: inherit;
   }
   /* 光标：difference 混合 = 真·反色块，压在任何底色上都对 */
   #nvimTerminal [data-nvw-cursor] {
