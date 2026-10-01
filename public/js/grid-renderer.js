@@ -181,15 +181,16 @@ export function createGridRenderer({ container, onResize }) {
       const f = fg ?? defFg;
       const b = bg ?? defBg;
       fg = b; bg = f;
-    } else {
-      // 普通格子若未指定颜色，明确使用协议 defaultColors 或 Normal 默认色彩
-      if (fg === undefined) fg = defFg;
-      if (bg === undefined) bg = defBg;
     }
     const fgHex = hex(fg);
-    const bgHex = hex(bg);
     if (fgHex) span.style.color = fgHex;
-    if (bgHex) span.style.backgroundColor = bgHex;
+
+    // 只有当背景色与默认底色不同时才添加局部 background-color；
+    // 与默认底色相同时保持透明，交由外层容器整体背景平铺渲染，彻底根绝横条色差与接缝
+    if (bg !== undefined && bg !== null && bg !== defBg) {
+      const bgHex = hex(bg);
+      if (bgHex) span.style.backgroundColor = bgHex;
+    }
     if (a.bold) span.style.fontWeight = 'bold';
     if (a.italic) span.style.fontStyle = 'italic';
     if (a.underline || a.undercurl || a.underdouble || a.underdotted || a.underdashed) span.style.textDecoration = 'underline';
