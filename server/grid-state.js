@@ -33,9 +33,16 @@ export class GridState {
 
   apply(name, args) {
     switch (name) {
-      case 'grid_resize':
-        this._ensure(args[0], args[1], args[2]);
+      case 'grid_resize': {
+        const [gridId, w, h] = args;
+        this._ensure(gridId, w, h);
+        // 主网格 (grid 1) 代表整体视口尺寸，同步更新快照顶层 cols/rows 元数据
+        if (gridId === 1) {
+          this.cols = w;
+          this.rows = h;
+        }
         break;
+      }
 
       case 'grid_clear': {
         const G = this.grids.get(args[0]);

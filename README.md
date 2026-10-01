@@ -1,6 +1,6 @@
 # NVW (Neovim WebTUI)
 
-NVW 是一个运行在浏览器里的本地 Neovim 工作台，基于 [WebTUI](https://webtui.ironclad.sh/) 规范构建，直接连接本机的 Neovim 进程。
+> **开发预览版 (Developer Preview)**：NVW 是一个运行在浏览器里的本地 Neovim 工作台，基于 [WebTUI](https://webtui.ironclad.sh/) 规范构建，直接连接本机的 Neovim 进程。当前处于持续迭代阶段，适合尝鲜与本地实验。
 
 ---
 
@@ -37,9 +37,10 @@ NVW 采用如下架构：
 
 ## 环境要求
 
-- Node.js (>= 18.0.0)
-- Neovim (>= 0.9.0，建议 0.10+)
-- pnpm (推荐) 或 npm
+- Node.js (运行环境 >= 18.0.0；若运行包含 puppeteer-core 的无头自动化测试建议 >= 22.12.0)
+- Neovim (开发与主测环境基于 v0.12.5，兼顾 v0.9.x ~ v0.12.x 协议映射)
+- pnpm (推荐 v9/v12) 或 npm
+- 支持操作系统：macOS / Linux / WSL (CLI 部分管理指令依赖 Unix 工具链)
 
 ---
 

@@ -58,6 +58,24 @@ if (!recentProjects.includes(currentProject) && currentProject !== os.homedir())
 }
 
 app.use((req, res, next) => {
+  // F01 校验 HTTP Host 与 Origin 白名单，防止外部恶意网站对本地 REST API 发起 CSRF / DNS Rebinding
+  const host = req.headers['host'] || '';
+  const origin = req.headers['origin'];
+  const isLocalHost = /^127\.0\.0\.1(:\d+)?$/.test(host) || /^localhost(:\d+)?$/.test(host);
+  if (!isLocalHost) {
+    return res.status(403).json({ error: 'Forbidden: Invalid Host' });
+  }
+  if (origin) {
+    try {
+      const originUrl = new URL(origin);
+      if (originUrl.hostname !== '127.0.0.1' && originUrl.hostname !== 'localhost') {
+        return res.status(403).json({ error: 'Forbidden: Untrusted Origin' });
+      }
+    } catch {
+      return res.status(403).json({ error: 'Forbidden: Malformed Origin' });
+    }
+  }
+
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
@@ -155,7 +173,39 @@ function getDirectoryItems(targetDir, rootPath) {
   }
 }
 
-// 快速扫描图表/输出文件（限制深度为2，防止大目录阻塞）
+// 判断路径是否在指定根目录范围内（防止同名前缀邻居目录逃逸及符号链接穿透）
+function isPathInside(targetPath, rootDir, { mustResolveReal = false } = {}) {
+  const resolvedTarget = path.resolve(targetPath);
+  const resolvedRoot = path.resolve(rootDir);
+
+  const rel = path.relative(resolvedRoot, resolvedTarget);
+  const isLexicallyInside = rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
+  if (!isLexicallyInside) return false;
+
+  if (mustResolveReal) {
+    try {
+      // 检查已存在路径或最近父目录的真实物理路径
+      let checkPath = resolvedTarget;
+      while (checkPath && !fs.existsSync(checkPath)) {
+        const parent = path.dirname(checkPath);
+        if (parent === checkPath) break;
+        checkPath = parent;
+      }
+      if (checkPath && fs.existsSync(checkPath)) {
+        const realTarget = fs.realpathSync(checkPath);
+        const realRoot = fs.realpathSync(resolvedRoot);
+        const realRel = path.relative(realRoot, realTarget);
+        if (realRel !== '' && (realRel.startsWith('..') || path.isAbsolute(realRel))) {
+          return false;
+        }
+      }
+    } catch {
+      return false;
+    }
+  }
+
+  return true;
+}
 function scanPlots(dirPath, rootPath = dirPath, depth = 0) {
   if (depth > 2) return [];
   const plotExts = new Set(['png', 'jpg', 'jpeg', 'svg', 'webp', 'pdf']);
@@ -194,6 +244,22 @@ function scanPlots(dirPath, rootPath = dirPath, depth = 0) {
 
 // ---------------- REST API ----------------
 
+// 当前服务 PID 与元数据记录
+app.get('/api/instance', (req, res) => {
+  res.json({
+    app: 'nvw',
+    pid: process.pid,
+    port: PORT,
+    workspace: currentProject
+  });
+});
+
+// 优雅关闭受控接口
+app.post('/api/shutdown', (req, res) => {
+  res.json({ success: true, message: 'Shutting down' });
+  setTimeout(() => gracefulShutdown(), 100);
+});
+
 // 获取当前工作区及最近记录
 app.get('/api/projects', (req, res) => {
   res.json({
@@ -203,52 +269,36 @@ app.get('/api/projects', (req, res) => {
   });
 });
 
-// 切换工作区
-app.post('/api/project/switch', async (req, res) => {
-  const targetPath = req.body.path || req.body.projectPath;
-  if (!targetPath || !fs.existsSync(targetPath)) {
-    return res.status(400).json({ error: '路径不存在' });
-  }
-
+// 统一工作区切换逻辑 (包含未保存检查、Neovim cwd 协调与最近记录更新)
+async function doSwitchWorkspace(targetPath, { force = false } = {}) {
   const resolved = path.resolve(targetPath);
-  try {
-    const stat = fs.statSync(resolved);
-    if (!stat.isDirectory()) {
-      return res.status(400).json({ error: '目标必须是有效目录' });
-    }
-  } catch (err) {
-    return res.status(400).json({ error: '无法访问目标目录' });
+  const stat = fs.statSync(resolved);
+  if (!stat.isDirectory()) {
+    throw new Error('目标必须是有效目录');
   }
 
-  // 检查当前 Neovim 实例中是否有未保存修改的缓冲区
   const nvim = await ensureUiSession();
   if (nvim) {
-    try {
-      const modified = await nvim.rpc('nvim_exec_lua', `
-        local list = {}
-        for _, b in ipairs(vim.api.nvim_list_bufs()) do
-          if vim.api.nvim_buf_is_loaded(b) and vim.bo[b].modified then
-            local name = vim.api.nvim_buf_get_name(b)
-            table.insert(list, { bufnr = b, name = (name ~= '' and name or '[No Name]') })
-          end
+    const modified = await nvim.rpc('nvim_exec_lua', `
+      local list = {}
+      for _, b in ipairs(vim.api.nvim_list_bufs()) do
+        if vim.api.nvim_buf_is_loaded(b) and vim.bo[b].modified then
+          local name = vim.api.nvim_buf_get_name(b)
+          table.insert(list, { bufnr = b, name = (name ~= '' and name or '[No Name]') })
         end
-        return list
-      `, []);
+      end
+      return list
+    `, []);
 
-      if (modified.length > 0 && !req.body.force) {
-        return res.status(409).json({
-          error: '存在未保存修改的缓冲区',
-          hasUnsaved: true,
-          modified
-        });
-      }
-
-      // 执行结构化 cwd 切换：协调全局 cwd 以及所有窗口与标签页的局部 cwd
-      await nvim.setCwd(resolved);
-    } catch (err) {
-      console.error('[ui] 切换 Neovim 工作目录失败:', err.message);
-      return res.status(500).json({ error: `切换 Neovim 工作目录失败: ${err.message}` });
+    if (modified.length > 0 && !force) {
+      const err = new Error('存在未保存修改的缓冲区');
+      err.hasUnsaved = true;
+      err.modified = modified;
+      err.status = 409;
+      throw err;
     }
+
+    await nvim.setCwd(resolved);
   }
 
   currentProject = resolved;
@@ -257,11 +307,33 @@ app.post('/api/project/switch', async (req, res) => {
     saveRecentProjects(recentProjects);
   }
 
-  res.json({
-    success: true,
+  return {
     current: currentProject,
     currentName: path.basename(currentProject) || currentProject
-  });
+  };
+}
+
+// 切换工作区
+app.post('/api/project/switch', async (req, res) => {
+  const targetPath = req.body.path || req.body.projectPath;
+  if (!targetPath || !fs.existsSync(targetPath)) {
+    return res.status(400).json({ error: '路径不存在' });
+  }
+
+  try {
+    const result = await doSwitchWorkspace(targetPath, { force: req.body.force === true });
+    res.json({ success: true, ...result });
+  } catch (err) {
+    if (err.hasUnsaved) {
+      return res.status(409).json({
+        error: err.message,
+        hasUnsaved: true,
+        modified: err.modified
+      });
+    }
+    const status = err.status || (err.message.includes('有效目录') ? 400 : 500);
+    res.status(status).json({ error: err.message });
+  }
 });
 
 // 目录浏览 API (供可视化文件夹浏览器使用)
@@ -298,8 +370,8 @@ app.get('/api/browse-dirs', (req, res) => {
 });
 
 // 新建工作区 API
-app.post('/api/create-workspace', (req, res) => {
-  const { parentDir, name } = req.body;
+app.post('/api/create-workspace', async (req, res) => {
+  const { parentDir, name, force } = req.body;
   if (!name || !name.trim()) {
     return res.status(400).json({ error: '工作区名称不能为空' });
   }
@@ -313,10 +385,26 @@ app.post('/api/create-workspace', (req, res) => {
     }
     fs.mkdirSync(targetPath, { recursive: true });
 
-    currentProject = targetPath;
-    if (currentProject !== os.homedir()) {
-      recentProjects = [targetPath, ...recentProjects.filter(p => p !== targetPath)].slice(0, 20);
-      saveRecentProjects(recentProjects);
+    // F05: 创建成功后复用统一工作区切换逻辑（进行未保存保护和 Neovim cwd 切换）
+    try {
+      await doSwitchWorkspace(targetPath, { force: force === true });
+    } catch (switchErr) {
+      if (switchErr.hasUnsaved) {
+        return res.status(409).json({
+          created: true,
+          error: switchErr.message,
+          hasUnsaved: true,
+          modified: switchErr.modified,
+          path: targetPath,
+          name: path.basename(targetPath)
+        });
+      }
+      return res.status(500).json({
+        created: true,
+        error: `目录已创建，但切换工作区失败: ${switchErr.message}`,
+        path: targetPath,
+        name: path.basename(targetPath)
+      });
     }
 
     res.json({
@@ -341,8 +429,9 @@ app.post('/api/create-item', (req, res) => {
 
   const base = req.body.parent ? path.resolve(currentProject, String(req.body.parent)) : currentProject;
   const target = path.resolve(base, name);
-  const inside = (p) => p === currentProject || p.startsWith(currentProject + path.sep);
-  if (!inside(base) || !inside(target)) return res.status(403).json({ error: '越权访问' });
+  if (!isPathInside(base, currentProject, { mustResolveReal: true }) || !isPathInside(target, currentProject, { mustResolveReal: true })) {
+    return res.status(403).json({ error: '越权访问：超出当前工作区范围' });
+  }
   if (fs.existsSync(target)) {
     return res.status(409).json({ error: kind === 'dir' ? '该目录已存在' : '该文件已存在' });
   }
@@ -361,9 +450,10 @@ app.post('/api/create-item', (req, res) => {
 });
 
 // 快速获取文件树 (支持单层 / 子目录展开)
-app.get('/api/files', (req, res) => {  const sub = req.query.dir ? path.resolve(currentProject, req.query.dir) : currentProject;
-  if (!sub.startsWith(currentProject) && sub !== currentProject) {
-    return res.status(403).json({ error: '越权访问' });
+app.get('/api/files', (req, res) => {
+  const sub = req.query.dir ? path.resolve(currentProject, req.query.dir) : currentProject;
+  if (!isPathInside(sub, currentProject, { mustResolveReal: false })) {
+    return res.status(403).json({ error: '越权访问：超出当前工作区范围' });
   }
 
   const items = getDirectoryItems(sub, currentProject);
@@ -621,13 +711,42 @@ const uiWss = new WebSocketServer({ noServer: true });
 
 // upgrade 路由：/ws/ui → nvim 常驻通道（唯一的数据通路）
 server.on('upgrade', (req, socket, head) => {
-  let pathname = '/';
-  try { pathname = new URL(req.url, 'http://localhost').pathname; } catch { /* 保持默认 */ }
-  if (pathname === '/ws/ui') {
-    uiWss.handleUpgrade(req, socket, head, ws => uiWss.emit('connection', ws, req));
-  } else {
+  let reqUrl;
+  try { reqUrl = new URL(req.url, 'http://localhost'); } catch { socket.destroy(); return; }
+  if (reqUrl.pathname !== '/ws/ui') {
     socket.destroy();
+    return;
   }
+
+  // F01 校验 Origin 与 Host 白名单，防御跨站 WebSocket 劫持 (CSWSH)
+  const host = req.headers['host'] || '';
+  const origin = req.headers['origin'];
+
+  // Host 必须是本地 loopback
+  const isLocalHost = /^127\.0\.0\.1(:\d+)?$/.test(host) || /^localhost(:\d+)?$/.test(host);
+  if (!isLocalHost) {
+    socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
+    socket.destroy();
+    return;
+  }
+
+  // Origin 检查：若有 Origin，必须匹配本地 loopback
+  if (origin) {
+    let originUrl;
+    try { originUrl = new URL(origin); } catch {
+      socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+    const isLocalOrigin = (originUrl.hostname === '127.0.0.1' || originUrl.hostname === 'localhost');
+    if (!isLocalOrigin) {
+      socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+  }
+
+  uiWss.handleUpgrade(req, socket, head, ws => uiWss.emit('connection', ws, req));
 });
 const uiClients = new Set();
 let uiSession = null;
@@ -717,6 +836,7 @@ uiWss.on('connection', async (ws, req) => {
     try { msg = JSON.parse(Buffer.isBuffer(raw) ? raw.toString('utf-8') : raw); } catch { return; }
     try {
       if (msg.t === 'input') await nvim.input(msg.keys);
+      else if (msg.t === 'paste') await nvim.paste(msg.data);
       else if (msg.t === 'mouse') await nvim.inputMouse(msg.button, msg.action, msg.modifier || '', msg.grid || 0, msg.row, msg.col);
       else if (msg.t === 'colors') await nvim.refreshColors();
       else if (msg.t === 'resize') {
@@ -735,22 +855,46 @@ uiWss.on('connection', async (ws, req) => {
   });
 });
 
-const gracefulShutdown = () => {
+let isShuttingDown = false;
+const gracefulShutdown = async () => {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
   console.log('\n🛑 正在停止 NVW 服务...');
-  try { uiSession?.dispose(); } catch { /* 已退出 */ }
-  uiSession = null;
 
+  // 1. 关闭所有活跃客户端 WebSocket 连接
+  for (const c of uiClients) {
+    try { c.close(); } catch {}
+  }
+  uiClients.clear();
+
+  // 2. 异步等待启动中或已就绪的 Neovim 实例完整 dispose 与回收
+  try {
+    if (uiStarting) {
+      const startingInstance = await Promise.race([
+        uiStarting.catch(() => null),
+        new Promise(r => setTimeout(r, 800))
+      ]);
+      if (startingInstance) await startingInstance.dispose(1500).catch(() => {});
+    }
+  } catch {}
+
+  if (uiSession) {
+    try { await uiSession.dispose(1500); } catch {}
+    uiSession = null;
+  }
+
+  // 3. 关闭 HTTP 监听
   server.close(() => {
     process.exit(0);
   });
 
   setTimeout(() => {
     process.exit(0);
-  }, 600);
+  }, 2500);
 };
 
-process.on('SIGINT', gracefulShutdown);
-process.on('SIGTERM', gracefulShutdown);
+process.on('SIGINT', () => { gracefulShutdown(); });
+process.on('SIGTERM', () => { gracefulShutdown(); });
 
 server.listen(PORT, HOST, () => {
   console.log(`\n======================================================`);

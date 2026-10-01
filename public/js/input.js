@@ -87,7 +87,7 @@ export function createInputLayer({ root, send, getCellSize }) {
   sink.addEventListener('paste', e => {
     e.preventDefault();
     const text = (e.clipboardData || window.clipboardData)?.getData('text') ?? '';
-    if (text) send(escText(text));
+    if (text) send({ paste: text });
   });
   sink.addEventListener('blur', () => { /* 保持简单：点击根节点会自动回焦 */ });
   root.addEventListener('mousedown', e => { if (e.target !== sink) { e.preventDefault(); focus(); } });

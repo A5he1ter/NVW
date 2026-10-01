@@ -3,7 +3,8 @@
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
-import { spawn, execSync } from 'child_process';
+import net from 'net';
+import { spawn } from 'child_process';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -45,46 +46,41 @@ function printHelp() {
 `);
 }
 
-function getPidsOnPort(port) {
-  try {
-    const stdout = execSync(`lsof -t -i:${port} 2>/dev/null`, { encoding: 'utf-8' }).trim();
-    if (!stdout) return [];
-    return stdout.split('\n').map(p => p.trim()).filter(Boolean);
-  } catch {
-    return [];
+/** 校验端口是否为合法正整数 */
+function validatePort(val) {
+  const p = parseInt(val, 10);
+  if (isNaN(p) || p <= 0 || p > 65535) {
+    console.error(`\x1b[31m✖ 错误: 无效端口 -> ${val}\x1b[0m`);
+    process.exit(1);
   }
+  return p;
 }
 
-const RECENT_FILE = path.join(process.env.HOME || '', '.nvw_recent_projects.json');
-
-/** 上次用过的工作区（server.js 把它写在 recent 列表首位） */
-function lastWorkspace() {
-  try {
-    const list = JSON.parse(fs.readFileSync(RECENT_FILE, 'utf-8'));
-    const hit = (Array.isArray(list) ? list : []).find(p => p && fs.existsSync(p));
-    return hit || null;
-  } catch {
-    return null;
-  }
-}
-
-/** 当前目录是否"看起来像"一个项目根 —— 决定无参启动时要不要用上次工作区兜底 */
-function looksLikeProject(dir) {
-  const MARKERS = ['.git', 'package.json', 'pyproject.toml', 'Cargo.toml', 'go.mod', 'pom.xml', 'Makefile', '.nvw'];
-  return MARKERS.some(m => fs.existsSync(path.join(dir, m)));
-}
-
-/** 探测端口上跑的是不是 NVW，返回它的工作区信息；不是或连不上则 null */
+/** 探测运行在指定端口上的 NVW 实例信息 */
 async function probeRunningNvw(port) {
   try {
     const ctl = AbortSignal.timeout(1200);
-    const res = await fetch(`http://127.0.0.1:${port}/api/projects`, { signal: ctl });
+    const res = await fetch(`http://127.0.0.1:${port}/api/instance`, { signal: ctl });
     if (!res.ok) return null;
     const data = await res.json();
-    if (!data || typeof data.current !== 'string') return null;
+    if (!data || data.app !== 'nvw') return null;
     return data;
   } catch {
     return null;
+  }
+}
+
+/** 请求正在运行的 NVW 实例优雅关闭 */
+async function requestGracefulShutdown(port) {
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/api/shutdown`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(2000)
+    });
+    return res.ok;
+  } catch {
+    return false;
   }
 }
 
@@ -162,35 +158,41 @@ async function handleWeb() {
   // 表现得像是"我启动的和你启动的不一样"。
   const url = `http://127.0.0.1:${port}`;
   const restart = args.includes('--restart');
-  const existingPids = getPidsOnPort(port);
-  if (existingPids.length > 0 && !restart) {
-    const running = await probeRunningNvw(port);
-    if (running) {
-      const samePath = path.resolve(running.current) === path.resolve(targetPath);
+  const running = await probeRunningNvw(port);
+  if (running) {
+    if (!restart) {
+      const samePath = path.resolve(running.workspace) === path.resolve(targetPath);
       if (samePath) {
-        console.log(`\x1b[32m✔ NVW 已在运行\x1b[0m（端口 ${port}，工作区 \x1b[1m${running.currentName}\x1b[0m），直接打开浏览器。`);
+        console.log(`\x1b[32m✔ NVW 已在运行\x1b[0m（端口 ${port}，工作区 \x1b[1m${running.workspace}\x1b[0m），直接打开浏览器。`);
       } else {
         const ok = await tellRunningNvwToSwitch(port, targetPath);
         if (ok) {
           console.log(`\x1b[32m✔ NVW 已在运行\x1b[0m（端口 ${port}），已把工作区切换到 \x1b[1m${targetPath}\x1b[0m。`);
         } else {
-          console.warn(`\x1b[33m⚠ NVW 已在运行但切换工作区失败\x1b[0m（当前：${running.current}）。`);
+          console.warn(`\x1b[33m⚠ NVW 已在运行但切换工作区失败\x1b[0m（当前：${running.workspace}）。`);
         }
       }
       console.log(`🌐 ${url}\n`);
       if (autoOpen) openBrowser(url);
       process.exit(0);
+    } else {
+      console.log(`\x1b[33m↻ --restart：通过控制接口优雅停止旧 NVW 实例 (PID: ${running.pid})...\x1b[0m`);
+      await requestGracefulShutdown(port);
+      await new Promise(r => setTimeout(r, 600));
     }
-    console.warn(`\x1b[33m⚠ 提示: 端口 ${port} 当前已被占用 (PID: ${existingPids.join(', ')})，且不是 NVW 服务。\x1b[0m`);
-    console.warn(`您可以执行 \x1b[1mnvw web --restart\x1b[0m 强制接管，或用 \x1b[1mnvw web -p <port>\x1b[0m 换个端口启动。\n`);
-    process.exit(1);
-  }
-  if (existingPids.length > 0 && restart) {
-    console.log(`\x1b[33m↻ --restart：强制接管端口 ${port}（结束 PID: ${existingPids.join(', ')}）\x1b[0m`);
-    for (const pid of existingPids) {
-      try { execSync(`kill -9 ${pid} 2>/dev/null`); } catch {}
+  } else {
+    // 检查端口是否被非 NVW 的外部进程占用
+    const inUse = await new Promise(resolve => {
+      const tester = net.createServer()
+        .once('error', err => resolve(err.code === 'EADDRINUSE'))
+        .once('listening', () => tester.close(() => resolve(false)))
+        .listen(port, '127.0.0.1');
+    });
+    if (inUse) {
+      console.error(`\x1b[31m✖ 端口 ${port} 当前已被其他外部程序占用，且非 NVW 服务。\x1b[0m`);
+      console.warn(`出于安全考虑禁止误杀外部程序。请使用 \x1b[1mnvw web -p <port>\x1b[0m 换个端口启动。\n`);
+      process.exit(1);
     }
-    await new Promise(r => setTimeout(r, 600));
   }
 
   console.log(`\x1b[1m\x1b[36m⚡ 正在启动 NVW Web 工作台...\x1b[0m`);
@@ -220,16 +222,11 @@ async function handleWeb() {
     try {
       child.kill('SIGINT');
     } catch {}
-
-    // 优雅退出并强制核验端口释放，确保下次启动绝不冲突
     setTimeout(() => {
-      const pids = getPidsOnPort(port);
-      for (const pid of pids) {
-        try { execSync(`kill -9 ${pid} 2>/dev/null`); } catch {}
-      }
-      console.log(`\x1b[32m✔ NVW 服务已停止，端口 ${port} 已完全释放。\x1b[0m`);
+      try { child.kill('SIGKILL'); } catch {}
+      console.log(`\x1b[32m✔ NVW 服务已停止。\x1b[0m`);
       process.exit(0);
-    }, 350);
+    }, 1500);
   };
 
   process.on('SIGINT', cleanExit);
@@ -237,55 +234,67 @@ async function handleWeb() {
 
   child.on('exit', () => {
     if (!isStopping) {
-      const pids = getPidsOnPort(port);
-      for (const pid of pids) {
-        try { execSync(`kill -9 ${pid} 2>/dev/null`); } catch {}
-      }
       process.exit(0);
     }
   });
 }
 
-function handleStop() {
+async function handleStop() {
   let port = 3999;
   const restArgs = args.slice(1);
   for (let i = 0; i < restArgs.length; i++) {
     if (restArgs[i] === '-p' || restArgs[i] === '--port') {
-      port = restArgs[++i] || port;
+      port = validatePort(restArgs[++i]);
     }
   }
 
-  const pids = getPidsOnPort(port);
-  if (pids.length === 0) {
-    console.log(`\x1b[32m✔ 端口 ${port} 没有正在运行的 NVW 服务。\x1b[0m`);
+  const instance = await probeRunningNvw(port);
+  if (!instance) {
+    console.log(`\x1b[33m○ 端口 ${port} 上没有探测到活动的 NVW 服务。\x1b[0m`);
     return;
   }
 
-  try {
-    for (const pid of pids) {
-      execSync(`kill -9 ${pid} 2>/dev/null`);
+  console.log(`🛑 正在通过控制接口停止 NVW 服务 (PID: ${instance.pid}, 端口: ${port})...`);
+  const shutdownOk = await requestGracefulShutdown(port);
+  if (shutdownOk) {
+    // 等待进程退出
+    for (let i = 0; i < 20; i++) {
+      await new Promise(r => setTimeout(r, 100));
+      const stillRunning = await probeRunningNvw(port);
+      if (!stillRunning) {
+        console.log(`\x1b[32m✔ 成功停止运行在端口 ${port} 上的 NVW 服务。\x1b[0m`);
+        return;
+      }
     }
-    console.log(`\x1b[32m✔ 成功停止运行在端口 ${port} 上的服务 (PID: ${pids.join(', ')}).\x1b[0m`);
-  } catch (err) {
-    console.error(`\x1b[31m✖ 停止进程失败: ${err.message}\x1b[0m`);
+  }
+
+  // 若优雅关闭超时，仅针对已核实身份的实例 PID 执行回收
+  if (instance.pid) {
+    try {
+      process.kill(instance.pid, 'SIGTERM');
+      await new Promise(r => setTimeout(r, 400));
+      process.kill(instance.pid, 'SIGKILL');
+    } catch {}
+    console.log(`\x1b[32m✔ 目标 NVW 实例 (PID: ${instance.pid}) 已终止。\x1b[0m`);
   }
 }
 
-function handleStatus() {
+async function handleStatus() {
   let port = 3999;
   const restArgs = args.slice(1);
   for (let i = 0; i < restArgs.length; i++) {
     if (restArgs[i] === '-p' || restArgs[i] === '--port') {
-      port = restArgs[++i] || port;
+      port = validatePort(restArgs[++i]);
     }
   }
 
-  const pids = getPidsOnPort(port);
-  if (pids.length > 0) {
+  const instance = await probeRunningNvw(port);
+  if (instance) {
     console.log(`\x1b[32m● NVW 服务正在运行\x1b[0m`);
-    console.log(`  - 端口: ${port}`);
-    console.log(`  - PID: ${pids.join(', ')}`);
-    console.log(`  - 网址: http://127.0.0.1:${port}`);
+    console.log(`  - 端口: ${instance.port}`);
+    console.log(`  - PID: ${instance.pid}`);
+    console.log(`  - 工作区: ${instance.workspace}`);
+    console.log(`  - 网址: http://127.0.0.1:${instance.port}`);
   } else {
     console.log(`\x1b[37m○ NVW 服务未在端口 ${port} 运行。\x1b[0m (使用 \x1b[32mnvw web\x1b[0m 启动)`);
   }

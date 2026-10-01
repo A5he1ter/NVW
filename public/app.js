@@ -236,6 +236,7 @@ function initTerminal() {
     getCellSize: () => ui.renderer.cellSize(),
     send: payload => {
       if (typeof payload === 'string') uiSend({ t: 'input', keys: payload });
+      else if (payload?.paste !== undefined) uiSend({ t: 'paste', data: payload.paste });
       else if (payload?.mouse) uiSend({ t: 'mouse', ...payload.mouse, grid: 1 });
     }
   });

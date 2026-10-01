@@ -21,6 +21,7 @@ import { decodeMultiStream, encode } from '@msgpack/msgpack';
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
+import { fileURLToPath } from 'node:url';
 
 const NVIM_BIN = fs.existsSync('/opt/homebrew/bin/nvim') ? '/opt/homebrew/bin/nvim' : 'nvim';
 
@@ -74,9 +75,11 @@ export class NvimEmbed extends EventEmitter {
   }
 
   async _start() {
-    const nvwDir = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+    const nvwDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
     const themeScript = path.join(nvwDir, 'nvim_theme.lua');
-    const nvimArgs = ['--embed', '-n', '-c', `set rtp+=${nvwDir}`];
+    // 使用 fnameescape / 表单转义空格与特殊符号，安全设置 rtp
+    const escapedNvwDir = nvwDir.replace(/([\\,\s])/g, '\\$1');
+    const nvimArgs = ['--embed', '-n', '-c', `set rtp+=${escapedNvwDir}`];
     if (fs.existsSync(themeScript)) nvimArgs.push('-S', themeScript);
     nvimArgs.push(...this.args);
 
@@ -274,7 +277,38 @@ export class NvimEmbed extends EventEmitter {
 
   // ---- 输入 ----
   /** keys 用 nvim 的键记法：可打印文本原样，特殊键写 <Esc> <C-w> <CR> … */
-  input(keys) { return this.rpc('nvim_input', keys); }
+  async input(keys) {
+    if (typeof keys !== 'string' || !keys) return;
+    const CHUNK_BYTES = 1024;
+    let str = keys;
+    while (str.length > 0 && !this.broken && !this.exited) {
+      // 若剩余字节数较大，按 1024 字节切片并留出微延迟排队，防止击穿 Neovim typeahead 缓冲区上限 (16KB)
+      const buf = Buffer.from(str, 'utf-8');
+      const chunkBuf = buf.subarray(0, CHUNK_BYTES);
+      const chunkStr = chunkBuf.toString('utf-8');
+      const accepted = await this.rpc('nvim_input', chunkStr);
+      const acceptedBytes = typeof accepted === 'number' && accepted > 0 ? accepted : Buffer.byteLength(chunkStr, 'utf-8');
+      if (acceptedBytes >= buf.length) {
+        break;
+      }
+      str = buf.subarray(acceptedBytes).toString('utf-8');
+      if (str.length > 0) {
+        await new Promise(r => setTimeout(r, 10));
+      }
+    }
+  }
+
+  /** 使用结构化 nvim_paste API 传输大段粘贴文本，分块注入，防止键位映射干扰或大文本截断 */
+  async paste(text) {
+    if (typeof text !== 'string' || !text) return false;
+    const CHUNK_SIZE = 16384;
+    for (let i = 0; i < text.length; i += CHUNK_SIZE) {
+      const chunk = text.slice(i, i + CHUNK_SIZE);
+      const isFirst = i === 0;
+      await this.rpc('nvim_paste', chunk, true, -1);
+    }
+    return true;
+  }
   inputMouse(button, action, modifier, grid, row, col) {
     return this.rpc('nvim_input_mouse', button, action, modifier, grid, row, col);
   }
@@ -346,7 +380,6 @@ export class NvimEmbed extends EventEmitter {
         timer = setTimeout(async () => {
           if (!this.exited) {
             try { this.child.kill('SIGKILL'); } catch { /* 已退出 */ }
-            // 确保在发出 SIGKILL 后仍然等待进程实际 exit
             if (!this.exited) {
               await new Promise(r => this.child.once('exit', r));
             }
