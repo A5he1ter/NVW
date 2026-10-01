@@ -1,4 +1,4 @@
-# NVW (Neovim Web)
+# NVW (Neovim WebTUI)
 
 NVW 是一个运行在浏览器里的本地 Neovim 工作台，基于 [WebTUI](https://webtui.ironclad.sh/) 规范构建，直接连接本机的 Neovim 进程。
 
@@ -24,6 +24,8 @@ NVW 采用如下架构：
 - 加载本机配置（`~/.config/nvim`）与插件，支持分屏、浮窗、宏录制与寄存器操作。
 - 完整消费 Neovim 的 `redraw` 事件流（包括 `grid_line`、`grid_scroll`、`hl_attr_define`、`default_colors_set`、`mode_info_set` 等），按 `flush` 边界更新画面。
 - 支持切换工作区目录，自动同步全局工作目录（`cwd`）与分屏窗口的局部工作目录（`lcd`/`tcd`），切换前检查未保存修改。
+- 广泛版本兼容：高亮表采用字符串键映射，支持 Neovim 0.9.x 至 0.12.x 版本。
+- 内置本地 Nerd Font 图标字体回退，在离线或 CDN 受限环境下图标可正常显示。
 - 中文输入法（IME）合成事件分发，避免字符重复或漏字。
 - 支持 `:terminal` 终端缓冲区与命令交互。
 - 弹出式代码补全菜单与选项插入。
