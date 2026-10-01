@@ -246,7 +246,7 @@ function initTerminal() {
   container.addEventListener('mouseup', () => focusTerminal());
   window.addEventListener('resize', () => {
     clearTimeout(ui.resizeTimer);
-    ui.resizeTimer = setTimeout(syncGridSize, 120);
+    ui.resizeTimer = setTimeout(syncGridSize, 250);
   });
   Promise.resolve(document.fonts?.ready).then(() => syncGridSize()).catch(() => {});
   setTimeout(syncGridSize, 400);

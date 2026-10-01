@@ -842,7 +842,12 @@ uiWss.on('connection', async (ws, req) => {
       else if (msg.t === 'resize') {
         const c = Math.max(20, parseInt(msg.cols, 10) || 100);
         const r = Math.max(5, parseInt(msg.rows, 10) || 30);
-        await nvim.tryResize(c, r);
+        // 视口 resize 仅在尺寸确实发生变更时下发，并用 catch 吸收因用户正在输入/弹窗阻塞时的短时超时
+        if (c !== nvim.cols || r !== nvim.rows) {
+          nvim.tryResize(c, r).catch(err => {
+            console.warn('[ui] nvim_ui_try_resize 响应已忽略 (Neovim 繁忙或正在等待输入):', err.message);
+          });
+        }
       }
     } catch (e) {
       console.error('[ui] 客户端消息处理失败:', e.message);

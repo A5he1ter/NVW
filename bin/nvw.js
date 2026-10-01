@@ -13,7 +13,7 @@ const SERVER_PATH = path.join(ROOT_DIR, 'server.js');
 const PKG_PATH = path.join(ROOT_DIR, 'package.json');
 
 const pkg = JSON.parse(fs.readFileSync(PKG_PATH, 'utf-8'));
-const VERSION = pkg.version || '0.1.1-rc.1';
+const VERSION = pkg.version || '0.1.1-rc.2';
 
 const args = process.argv.slice(2);
 const command = args[0];
