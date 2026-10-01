@@ -59,6 +59,12 @@ export function createGridRenderer({ container, onResize }) {
     G.rows[r][c] = cell;
   }
 
+  function applyDefaultColors(bgHex) {
+    if (bgHex) {
+      container.style.backgroundColor = bgHex;
+    }
+  }
+
   function applyEvent(name, args) {
     switch (name) {
       case 'grid_resize': {
@@ -143,6 +149,7 @@ export function createGridRenderer({ container, onResize }) {
           bg: args[1] !== undefined && args[1] !== -1 ? args[1] : null,
           sp: args[2] !== undefined && args[2] !== -1 ? args[2] : null
         };
+        applyDefaultColors(hex(defaultColors.bg));
         for (const g of grids.keys()) markAllDirty(g);
         break;
       }
@@ -307,7 +314,10 @@ export function createGridRenderer({ container, onResize }) {
       layers.clear();
       grids.clear();
       if (snap.hlTable) hlTable = { ...snap.hlTable };
-      if (snap.defaultColors) defaultColors = { ...snap.defaultColors };
+      if (snap.defaultColors) {
+        defaultColors = { ...snap.defaultColors };
+        applyDefaultColors(hex(defaultColors.bg));
+      }
       if (snap.modeInfo) modeInfo = snap.modeInfo;
       if (snap.cursorShape) renderer = snap.cursorShape;
       else if (snap.modeInfo && snap.modeIdx !== undefined && snap.modeInfo[snap.modeIdx]?.cursor_shape) {
@@ -331,6 +341,8 @@ export function createGridRenderer({ container, onResize }) {
     },
     setColors(c) {
       colors = c;
+      const defBg = hex(c.normal?.bg) || hex(defaultColors.bg);
+      applyDefaultColors(defBg);
       for (const g of grids.keys()) markAllDirty(g);
       commit();
     },
