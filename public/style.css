@@ -56,11 +56,10 @@
     flex-direction: column;
   }
 
-  /* 官方组件给 badge/spinner/button 显式声明了 display:inline-flex|inline-block，
-     会盖掉浏览器对 [hidden] 的 display:none。契约 §2.6/§2.7 的
-     #zenBadge / #btnReconnect / #searchSpinner 都靠 hidden 控制显隐，这里统一修回。
-     nvw 是层叠顺序最后一层，同特异性即可胜出。 */
-  [hidden] { display: none; }
+  /* 官方组件或外壳给 #topbar / #sidebar / badge 等显式声明了 display:flex|inline-flex，
+     特异性高于普通属性选择器 [hidden]，导致元素设置 hidden=true 时依然为 display:flex。
+     使用 [hidden] { display: none !important; } 确保专注模式 (Zen Mode) 与其它显隐状态可靠生效。 */
+  [hidden] { display: none !important; }
 
   /* 顶栏：官方文档站同款一行布局 */
   #topbar {
