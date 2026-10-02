@@ -903,6 +903,7 @@ async function initApp() {
   try { await document.fonts?.ready; } catch { /* 无 Font Loading API 时跳过 */ }
 
   await loadThemes();
+  applyTheme(state.currentTheme);
   initThemePicker();
   await loadWorkspaces();
   // 终端初始化失败（字体度量异常、WebGL 不可用…）不能拖垮整个启动：
